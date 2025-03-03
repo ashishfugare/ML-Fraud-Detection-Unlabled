@@ -9,6 +9,9 @@ from sklearn.ensemble import IsolationForest
 from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.model_selection import train_test_split
 import warnings
+
+import shap
+
 warnings.filterwarnings('ignore')
 
 # Set display options for better readability
@@ -21,7 +24,7 @@ print("-" * 50)
 
 # Assuming the file is in the same directory
 try:
-    data = pd.read_csv("C:\\Users\\ASHISH FUGARE\\Downloads\\Phase 1 Claude Code\\financial_anomaly_data.csv")               
+    data = pd.read_csv("/content/financial_anomaly_data.csv")               
     print(f"Data loaded successfully with {data.shape[0]} rows and {data.shape[1]} columns")
 except Exception as e:
     print(f"Error loading data: {e}")
@@ -170,7 +173,7 @@ scaled_features = scaler.fit_transform(processed_data[features])
 
 # Apply One-Class SVM
 print("Training One-Class SVM model...")
-ocsvm = OneClassSVM(kernel='rbf', gamma='auto', nu=0.05)  # nu is similar to contamination
+ocsvm = OneClassSVM(kernel='rbf', gamma='auto', nu=0.01)  # nu is similar to contamination
 ocsvm.fit(scaled_features)
 
 # Predict anomalies
@@ -189,25 +192,76 @@ print(potential_fraud_ocsvm.head(10))
 processed_data['OCSVM_Score'] = ocsvm.decision_function(scaled_features)
 # Lower scores indicate higher likelihood of being anomalies
 
-# Step 7: Simple Statistical Anomaly Detection (Enhance with domain knowledge)
-print("\nStep 7: Statistical Anomaly Detection")
+
+#Changs to try to improve statiscal to iqr
+## Step 7: Simple Statistical Anomaly Detection (Enhance with domain knowledge)
+#print("\nStep 7: Statistical Anomaly Detection")
+#print("-" * 50)
+
+## Use Z-score for Amount to detect outliers
+#processed_data['Amount_ZScore'] = (processed_data['Amount'] - processed_data['Amount'].mean()) / processed_data['Amount'].std()
+#processed_data['IQR_Anomaly'] = processed_data['Amount_ZScore'].apply(lambda x: 1 if abs(x) > 3 else 0)
+
+## Transactions flagged as anomalous by statistical method
+#statistical_anomalies = processed_data[processed_data['IQR_Anomaly'] == 1]
+#print(f"Statistical method identified {len(statistical_anomalies)} potential fraudulent transactions")
+
+
+# Additional Step: Feature Importance Analysis using SHAP
+print("\nAdditional Step: Feature Importance Analysis using SHAP")
 print("-" * 50)
 
-# Use Z-score for Amount to detect outliers
-processed_data['Amount_ZScore'] = (processed_data['Amount'] - processed_data['Amount'].mean()) / processed_data['Amount'].std()
-processed_data['Statistical_Anomaly'] = processed_data['Amount_ZScore'].apply(lambda x: 1 if abs(x) > 3 else 0)
+import shap
 
-# Transactions flagged as anomalous by statistical method
-statistical_anomalies = processed_data[processed_data['Statistical_Anomaly'] == 1]
-print(f"Statistical method identified {len(statistical_anomalies)} potential fraudulent transactions")
+# For computational efficiency, take a subset of scaled_features
+sample_data = scaled_features[:200]
 
+# Define a wrapper function for the decision_function of One-Class SVM.
+# This function returns the anomaly score for each instance.
+def svm_decision(x):
+    return ocsvm.decision_function(x)
+
+# Initialize the KernelExplainer with the model wrapper and a background dataset.
+explainer = shap.KernelExplainer(svm_decision, sample_data)
+
+# Calculate SHAP values on the sample (this may take some time)
+shap_values = explainer.shap_values(sample_data, nsamples=100)
+
+# Create a summary plot to visualize feature importance
+shap.summary_plot(shap_values, sample_data, feature_names=features)
+
+
+#############
+# Step 7: IQR-based Anomaly Detection
+print("\nStep 7: IQR-based Anomaly Detection")
+print("-" * 50)
+
+# Calculate Q1, Q3, and the Interquartile Range (IQR) for 'Amount'
+Q1 = processed_data['Amount'].quantile(0.25)
+Q3 = processed_data['Amount'].quantile(0.75)
+IQR = Q3 - Q1
+
+# Define lower and upper bounds for detecting outliers
+lower_bound = Q1 - 1.5 * IQR
+upper_bound = Q3 + 1.5 * IQR
+
+# Flag anomalies: set IQR_Anomaly to 1 if the 'Amount' is outside these bounds, else 0
+processed_data['IQR_Anomaly'] = processed_data['Amount'].apply(
+    lambda x: 1 if (x < lower_bound or x > upper_bound) else 0
+)
+
+# Transactions flagged as anomalous by the IQR method
+iqr_anomalies = processed_data[processed_data['IQR_Anomaly'] == 1]
+print(f"IQR-based method identified {len(iqr_anomalies)} potential fraudulent transactions")
+
+'''
 # Step 8: Comparison between methods
 print("\nStep 8: Comparison between Methods")
 print("-" * 50)
 
 # Transactions flagged by both methods
 both_methods_anomalies = processed_data[(processed_data['OCSVM_Anomaly'] == 1) & 
-                                        (processed_data['Statistical_Anomaly'] == 1)]
+                                        (processed_data['IQR_Anomaly'] == 1)]
 print(f"Number of transactions flagged by both methods: {len(both_methods_anomalies)}")
 
 # Analyze characteristics of flagged transactions
@@ -217,7 +271,26 @@ if len(both_methods_anomalies) > 0:
         if feature in ['Amount']:
             print(f"Average {feature}: {both_methods_anomalies[feature].mean():.2f} " +
                   f"(vs. {processed_data[feature].mean():.2f} overall)")
+'''
 
+# Step 8: Comparison between Methods
+print("\nStep 8: Comparison between Methods")
+print("-" * 50)
+
+# Transactions flagged by both methods (One-Class SVM and IQR-based detection)
+both_methods_anomalies = processed_data[(processed_data['OCSVM_Anomaly'] == 1) & 
+                                        (processed_data['IQR_Anomaly'] == 1)]
+print(f"Number of transactions flagged by both methods: {len(both_methods_anomalies)}")
+
+# Analyze characteristics of flagged transactions for all numeric features
+print("\nCharacteristics of transactions flagged by both methods:")
+numeric_features = processed_data.select_dtypes(include=[np.number]).columns.tolist()
+
+for feature in numeric_features:
+    flagged_mean = both_methods_anomalies[feature].mean()
+    overall_mean = processed_data[feature].mean()
+    print(f"Average {feature}: {flagged_mean:.2f} (vs. {overall_mean:.2f} overall)")
+###
 # Step 9: Save processed data and results
 print("\nStep 9: Save Results")
 print("-" * 50)
@@ -236,7 +309,10 @@ print("\nSummary:")
 print("-" * 50)
 print(f"Total transactions processed: {len(processed_data)}")
 print(f"Potential fraudulent transactions (One-Class SVM): {len(potential_fraud_ocsvm)} ({len(potential_fraud_ocsvm)/len(processed_data)*100:.2f}%)")
-print(f"Potential fraudulent transactions (Statistical): {len(statistical_anomalies)} ({len(statistical_anomalies)/len(processed_data)*100:.2f}%)")
+#print(f"Potential fraudulent transactions (Statistical): {len(IQR_Anomaly)} ({len(IQR_Anomaly)/len(processed_data)*100:.2f}%)")
+print(f"Potential fraudulent transactions (Statistical): {processed_data['IQR_Anomaly'].sum()} "
+      f"({processed_data['IQR_Anomaly'].sum() / len(processed_data) * 100:.2f}%)")
+
 print(f"Transactions flagged by both methods: {len(both_methods_anomalies)} ({len(both_methods_anomalies)/len(processed_data)*100:.2f}%)")
 
 print("\nPhase 1 processing complete. Ready for Phase 2 with Isolation Forest.")
