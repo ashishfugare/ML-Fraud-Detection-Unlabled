@@ -131,18 +131,24 @@ Model Performance (5% contamination rate):
 ML-Fraud-Detection-Unlabeled/
 ├── README.md
 ├── data/
-│   └── transactions.csv
-├── src/
-│   ├── data_preprocessing.py
-│   ├── feature_engineering.py
-│   ├── models.py
-│   └── evaluation.py
+│   └── financial_anomaly_data.csv
+├── Phase 2 Code/
+│   ├── Mannuel_Implentation.py
+│   ├── Phase2_Implementation.py
 ├── notebooks/
-│   ├── exploratory_analysis.ipynb
-│   └── model_comparison.ipynb
+│   ├── Mannuel_Implentation.py.ipynb
+│   └── Phase2_Implementatio.ipynb
 └── results/
-    ├── anomaly_scores.csv
-    └── feature_importance.csv
+    ├── ensemble_frauds(1).csv
+    └── isolation_forest_frauds(1).csv
+    └── lof_frauds(1).csv
+    └── anomaly_examples.txt
+    └── lof_frauds(1).csv
+|
+├──Report.pdf
+└──fraud-detection-phase1.py 
+
+
 ```
 
 ## Usage
