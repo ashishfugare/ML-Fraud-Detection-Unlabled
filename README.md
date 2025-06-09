@@ -149,22 +149,6 @@ ML-Fraud-Detection-Unlabeled/
 
 ```
 
-## Usage
-
-```python
-# Basic usage example
-from src.models import FraudDetector
-
-# Initialize detector
-detector = FraudDetector(contamination=0.05)
-
-# Fit models
-detector.fit(X_train)
-
-# Predict anomalies
-anomalies = detector.predict(X_test)
-```
-
 ## Future Work
 
 - Experiment with other anomaly detection algorithms (One-Class SVM, Autoencoders)
